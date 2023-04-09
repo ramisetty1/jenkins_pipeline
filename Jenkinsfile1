@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+
+    
+
+    stages {
+
+
+
+        stage('gitclone'){
+            steps {
+                echo 'its a clone stage'
+                git branch: 'main',
+                url: 'https://github.com/ramisetty1/demo-counter-app.git'
+            }
+        }
+
+        stage('unit-test') {
+            steps {
+                sh '/opt/maven/bin/mvn test'
+            }
+        }
+
+        stage('integration-test') {
+            steps {
+                sh '/opt/maven/bin/mvn verify -DskipUnitTests'
+            }
+        }
+
+        stage('build') {
+            steps {
+                sh '/opt/maven/bin/mvn clean install'
+            }
+        }
+
+        stage('sonar') {
+            steps {
+                script {
+                    withSonarQubeEnv(credentialsId: 'sonar-api') {
+                        sh '/opt/maven/bin/mvn clean package sonar:sonar'
+                    }
+                }
+            }
+        }
+
+        stage('qualitygate') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-api'
+                }
+            }
+        }
+
+        stage('nexus') {
+            steps {
+                script{
+                    def pom = readMavenPom file: 'pom.xml'
+                    nexusArtifactUploader artifacts: [[artifactId: 'springboot', classifier: '', file: 'target/Uber.jar', type: 'jar']],
+                     credentialsId: 'nexus-auth', 
+                     groupId: 'com.example', 
+                     nexusUrl: '34.125.64.182:8081', 
+                     nexusVersion: 'nexus3', 
+                     protocol: 'http', 
+                     repository: 'javaapp', 
+                     version: "${pom.version}"
+                }
+            }
+        }
+    }
+
+}
